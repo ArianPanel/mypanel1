@@ -2,22 +2,15 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, s
 import json
 import os
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime
 import hashlib
 
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(16)
 
-USERS_FILE = 'users.json'
-CONFIGS_FILE = 'configs.json'
-
-if not os.path.exists(USERS_FILE):
-    with open(USERS_FILE, 'w') as f:
-        json.dump({"admin": {"password": hashlib.sha256("admin123".encode()).hexdigest(), "role": "admin"}}, f)
-
-if not os.path.exists(CONFIGS_FILE):
-    with open(CONFIGS_FILE, 'w') as f:
-        json.dump({}, f)
+# داده‌ها در حافظه نگهداری می‌شوند تا با ری‌استارت Railway پاک نشوند
+USERS = {"admin": {"password": hashlib.sha256("admin123".encode()).hexdigest(), "role": "admin"}}
+CONFIGS = {}
 
 def check_auth():
     return session.get('logged_in', False)
@@ -27,12 +20,10 @@ def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        with open(USERS_FILE, 'r') as f:
-            users = json.load(f)
-        if username in users and users[username]['password'] == hashlib.sha256(password.encode()).hexdigest():
+        if username in USERS and USERS[username]['password'] == hashlib.sha256(password.encode()).hexdigest():
             session['logged_in'] = True
             session['username'] = username
-            session['role'] = users[username]['role']
+            session['role'] = USERS[username]['role']
             return redirect(url_for('dashboard'))
         return "❌ نام کاربری یا رمز عبور اشتباه است!"
     return '''
@@ -50,12 +41,10 @@ def login():
 def dashboard():
     if not check_auth():
         return redirect(url_for('login'))
-    with open(CONFIGS_FILE, 'r') as f:
-        configs = json.load(f)
     return f'''
     <h2>📊 داشبورد</h2>
-    <p>تعداد کل کانفیگ‌ها: {len(configs)}</p>
-    <p>کاربران فعال: {sum(1 for c in configs.values() if c.get('status') == 'active')}</p>
+    <p>تعداد کل کانفیگ‌ها: {len(CONFIGS)}</p>
+    <p>کاربران فعال: {sum(1 for c in CONFIGS.values() if c.get('status') == 'active')}</p>
     <br>
     <a href="/create_config">➕ ساخت کانفیگ جدید</a><br>
     <a href="/logout">🚪 خروج</a>
@@ -79,11 +68,7 @@ def create_config():
             "created_at": datetime.now().isoformat(),
             "uuid": secrets.token_hex(16)
         }
-        with open(CONFIGS_FILE, 'r') as f:
-            configs = json.load(f)
-        configs[name] = config
-        with open(CONFIGS_FILE, 'w') as f:
-            json.dump(configs, f, indent=2)
+        CONFIGS[name] = config
         return f"✅ کانفیگ {name} ساخته شد! <a href='/'>بازگشت</a>"
     return '''
     <h2>🛠️ ساخت کانفیگ جدید</h2>

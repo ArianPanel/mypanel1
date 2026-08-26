@@ -8,7 +8,6 @@ import hashlib
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(16)
 
-# داده‌ها در حافظه نگهداری می‌شوند تا با ری‌استارت Railway پاک نشوند
 USERS = {"admin": {"password": hashlib.sha256("admin123".encode()).hexdigest(), "role": "admin"}}
 CONFIGS = {}
 
@@ -88,6 +87,7 @@ def create_config():
 @app.route('/logout')
 def logout():
     session.clear()
-    return redirect(url_for('login')
-if if __name__ == "__main__":
+    return redirect(url_for('login'))
+
+if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)

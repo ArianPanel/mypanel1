@@ -1,0 +1,27 @@
+{
+  "outbounds": [
+    { "tag": "direct", "protocol": "freedom" },
+    {
+      "tag": "warp-game",
+      "protocol": "wireguard",
+      "settings": {
+        "secretKey": "جایگزین_کلید_خصوصی_شما_اینجا",
+        "MTU": 1280,
+        "reserved": [1, 2, 3],
+        "address": ["172.16.0.2/32"],
+        "peers": [{
+            "publicKey": "جایگزین_کلید_عمومی_شما_اینجا",
+            "allowedIPs": ["0.0.0.0/0", "::/0"],
+            "endpoint": "engage.cloudflareclient.com:2408"
+        }]
+      }
+    }
+  ],
+  "routing": {
+    "domainStrategy": "IPIfNonMatch",
+    "rules": [
+      { "type": "field", "network": "tcp,udp", "port": "27015-27050", "outboundTag": "warp-game" },
+      { "type": "field", "domain": ["geosite:google-gemini", "openai.com"], "outboundTag": "warp-game" }
+    ]
+  }
+}

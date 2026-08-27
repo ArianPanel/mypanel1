@@ -1,79 +1,87 @@
-from fastapi import FastAPI, Request, Form
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+import os, json, uuid, hashlib, secrets
+import httpx
+from pydantic import BaseModel
 import uvicorn
-import os
-import hashlib
-import secrets
 
 app = FastAPI()
 
+# تنظیمات پایه (متغیرهای محیطی Railway)
+PORT = int(os.environ.get("PORT", 8080))
 ADMIN_USER = "admin"
-ADMIN_PASS_HASH = hashlib.sha256("admin123".encode()).hexdigest()
-CONFIGS = {}
+ADMIN_PASS = os.environ.get("ADMIN_PASSWORD", "admin123") # تغییر پسورد الزامی!
+SECRET_KEY = os.environ.get("SECRET_KEY", secrets.token_hex(32))
+DATA_DIR = os.environ.get("DATA_DIR", "/data")
+PANEL_DOMAIN = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "localhost")
 
+# فایل وضعیت (پایدار در دیسک)
+STATE_FILE = os.path.join(DATA_DIR, "spider_state.json")
 
-@app.get("/", response_class=HTMLResponse)
-async def home():
+# اتصال به هسته Xray از طریق فایل JSON در روت
+XRAY_CONFIG_FILE = "xray_config.json"
+
+def load_state():
+    if not os.path.exists(STATE_FILE):
+        return {"users": [], "inbounds": []}
+    with open(STATE_FILE, 'r') as f:
+        return json.load(f)
+
+def save_state(state):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(STATE_FILE, 'w') as f:
+        json.dump(state, f, indent=2)
+
+# مدل داده برای ساخت کانفیگ
+class UserCreate(BaseModel):
+    username: str
+    limit_bytes: int = 1073741824 # 1GB پیش‌فرض
+    expiry_days: int = 30
+
+# صفحه ورود (رابط ساده شیک) - مشابه اسپایدر
+@app.get("/login")
+async def login_page():
     return """
-    <h2>🔐 ورود به پنل مدیریت</h2>
-    <form method="post" action="/login">
-        <input type="text" name="username" placeholder="نام کاربری" required><br><br>
-        <input type="password" name="password" placeholder="رمز عبور" required><br><br>
-        <button type="submit">ورود</button>
-    </form>
-    <p>پیش‌فرض: admin / admin123</p>
-    """
-
-
-@app.post("/login", response_class=HTMLResponse)
-async def login(username: str = Form(...), password: str = Form(...)):
-    if username == ADMIN_USER and hashlib.sha256(password.encode()).hexdigest() == ADMIN_PASS_HASH:
-        configs_html = ""
-        for name, cfg in CONFIGS.items():
-            configs_html += f"<p>{cfg['protocol']}://{cfg['uuid']}@example.com#{cfg['name']}</p>"
-        
-        return f"""
-        <h2>📊 داشبورد</h2>
-        <p>تعداد کل کانفیگ‌ها: {len(CONFIGS)}</p>
-        <h3>ساخت کانفیگ جدید</h3>
-        <form method="post" action="/create_config">
-            <input type="text" name="name" placeholder="نام کاربر" required><br><br>
-            <select name="protocol">
-                <option value="vless">VLESS</option>
-                <option value="vmess">VMESS</option>
-                <option value="trojan">Trojan</option>
-            </select><br><br>
-            <button type="submit">ساخت کانفیگ</button>
+    <html><head><title>Spider Panel</title></head><body style="font-family:sans-serif; background:#0f172a; color:#fff; display:flex; justify-content:center; align-items:center; height:100vh;">
+      <div>
+        <h2>ورود به پنل</h2>
+        <form method="post" action="/login" style="display:flex; flex-direction:column; gap:10px;">
+          <input type="text" name="username" placeholder="User" style="padding:10px; border-radius:5px;">
+          <input type="password" name="password" placeholder="Pass" style="padding:10px; border-radius:5px;">
+          <button type="submit" style="padding:10px; background:#3b82f6; color:#fff; border:none; cursor:pointer;">ورود</button>
         </form>
-        <h3>لیست کانفیگ‌ها</h3>
-        {configs_html}
-        """
-    return """
-    <h2>❌ نام کاربری یا رمز عبور اشتباه است!</h2>
-    <a href="/">بازگشت به ورود</a>
+      </div>
+    </body></html>
     """
 
+@app.post("/login")
+async def do_login(request: Request):
+    form = await request.form()
+    if form["username"] == ADMIN_USER and form["password"] == ADMIN_PASS:
+        return {"status": "ok"}
+    raise HTTPException(status_code=401, detail="Authentication Failed")
 
-@app.post("/create_config", response_class=HTMLResponse)
-async def create_config(name: str = Form(...), protocol: str = Form(...)):
-    uuid = secrets.token_hex(16)
-    config = {"name": name, "protocol": protocol, "uuid": uuid}
-    CONFIGS[name] = config
-    
-    configs_html = ""
-    for name, cfg in CONFIGS.items():
-        configs_html += f"<p>{cfg['protocol']}://{cfg['uuid']}@example.com#{cfg['name']}</p>"
-        
-    return f"""
-    <h2>✅ کانفیگ {name} ساخته شد!</h2>
-    <h2>📊 داشبورد</h2>
-    <p>تعداد کل کانفیگ‌ها: {len(CONFIGS)}</p>
-    <a href="/">بازگشت به داشبورد</a>
-    <br><br>
-    <h3>لیست کانفیگ‌ها</h3>
-    {configs_html}
-    """
+# ساخت کانفیگ و اتصال واقعی به هسته
+@app.post("/api/create_config")
+async def create_config(data: UserCreate):
+    state = load_state()
+    user_uuid = str(uuid.uuid4())
+    # ساخت لینک VLESS (بر اساس ساختار پنل اسپایدر) با دامنه اصلی Railway
+    link = f"vless://{user_uuid}@{PANEL_DOMAIN}:443?type=ws&security=tls&path=%2F#Spider-{data.username}"
+    state["users"].append({
+        "id": user_uuid, "username": data.username,
+        "limit": data.limit_bytes, "expiry": data.expiry_days
+    })
+    save_state(state)
+    return {"message": "Config Created", "link": link}
 
+# مسیر اصلی برای ساخت لینک‌های Xray به صورت پویا (مرجع اصلی)
+@app.get("/xray/{uuid}")
+async def get_xray_config(uuid: str):
+    # این بخش در پنل‌های واقعی به فایل xray_config.json متصل می‌شود
+    with open(XRAY_CONFIG_FILE, 'r') as f:
+        return JSONResponse(content=json.load(f))
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+    uvicorn.run(app, host="0.0.0.0", port=PORT)

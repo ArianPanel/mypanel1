@@ -9,11 +9,9 @@ import secrets
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
-# اطلاعات اولیه (برای تست - بعداً باید در دیتابیس ذخیره شود)
+# اطلاعات اولیه (برای تست)
 ADMIN_USER = "admin"
 ADMIN_PASS_HASH = hashlib.sha256("admin123".encode()).hexdigest()
-
-# ذخیره کانفیگ‌های ساخته شده
 CONFIGS = {}
 
 
@@ -30,8 +28,12 @@ async def login(request: Request, username: str = Form(...), password: str = For
 
 
 @app.post("/create_config")
-async def create_config(name: str = Form(...), protocol: str = Form(...)):
+async def create_config(request: Request, name: str = Form(...), protocol: str = Form(...)):
     uuid = secrets.token_hex(16)
     config = {"name": name, "protocol": protocol, "uuid": uuid}
     CONFIGS[name] = config
     return templates.TemplateResponse("dashboard.html", {"request": request, "configs": CONFIGS})
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))

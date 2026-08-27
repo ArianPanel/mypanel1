@@ -1,0 +1,18 @@
+<h2>📊 داشبورد</h2>
+<p>تعداد کل کانفیگ‌ها: {{ configs|length }}</p>
+
+<h3>ساخت کانفیگ جدید</h3>
+<form method="post" action="/create_config">
+    <input type="text" name="name" placeholder="نام کاربر" required><br><br>
+    <select name="protocol">
+        <option value="vless">VLESS</option>
+        <option value="vmess">VMESS</option>
+        <option value="trojan">Trojan</option>
+    </select><br><br>
+    <button type="submit">ساخت کانفیگ</button>
+</form>
+
+<h3>لیست کانفیگ‌ها</h3>
+{% for name, cfg in configs.items() %}
+    <p>{{ cfg.protocol }}://{{ cfg.uuid }}@example.com#{{ cfg.name }}</p>
+{% endfor %}

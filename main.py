@@ -1,5 +1,5 @@
-from fastapi import FastAPI, Request, Form, Depends
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI, Request, Form
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 import uvicorn
 import os
@@ -9,7 +9,6 @@ import secrets
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
-# اطلاعات اولیه (برای تست)
 ADMIN_USER = "admin"
 ADMIN_PASS_HASH = hashlib.sha256("admin123".encode()).hexdigest()
 CONFIGS = {}
@@ -17,7 +16,7 @@ CONFIGS = {}
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+    return templates.TemplateResponse("login.html", {"request": request})
 
 
 @app.post("/login")

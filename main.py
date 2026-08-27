@@ -1,4 +1,3 @@
-import sys; sys.modules['main'] = __import__('app')
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 import json
 import os
@@ -47,6 +46,7 @@ def dashboard():
     <p>کاربران فعال: {sum(1 for c in CONFIGS.values() if c.get('status') == 'active')}</p>
     <br>
     <a href="/create_config">➕ ساخت کانفیگ جدید</a><br>
+    <a href="/configs">📋 لیست کانفیگ‌ها</a><br>
     <a href="/logout">🚪 خروج</a>
     '''
 
@@ -69,7 +69,7 @@ def create_config():
             "uuid": secrets.token_hex(16)
         }
         CONFIGS[name] = config
-        return f"✅ کانفیگ {name} ساخته شد! <a href='/'>بازگشت</a>"
+        return f"✅ کانفیگ {name} ساخته شد! <a href='/configs'>مشاهده لیست</a>"
     return '''
     <h2>🛠️ ساخت کانفیگ جدید</h2>
     <form method="post">
@@ -84,6 +84,27 @@ def create_config():
         <button type="submit">ساخت کانفیگ</button>
     </form>
     '''
+
+@app.route('/configs')
+def configs():
+    if not check_auth():
+        return redirect(url_for('login'))
+    html = "<h2>📋 لیست کانفیگ‌ها</h2>"
+    if not CONFIGS:
+        return "<h3>هنوز کانفیگی ساخته نشده است.</h3><br><a href='/create_config'>ساخت اولین کانفیگ</a>"
+    
+    for name, cfg in CONFIGS.items():
+        # ساخت لینک واقعی (فرمت ساده)
+        link = f"{cfg['protocol']}://{cfg['uuid']}@{cfg['name']}.example.com:443?security=none&type=ws&path=%2F#Panel"
+        html += f"""
+        <div style="border:1px solid #ccc; padding:10px; margin-bottom:10px;">
+            <strong>{cfg['name']}</strong> - {cfg['protocol']} - {cfg['expiry']}<br>
+            <input type="text" value="{link}" readonly style="width:80%;"><br><br>
+            <button onclick="navigator.clipboard.writeText('{link}')">📋 کپی لینک</button>
+        </div>
+        """
+    html += "<br><a href='/dashboard'>بازگشت به داشبورد</a>"
+    return html
 
 @app.route('/logout')
 def logout():

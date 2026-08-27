@@ -1,3 +1,4 @@
+import sys; sys.modules['main'] = __import__('app')
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 import json
 import os
